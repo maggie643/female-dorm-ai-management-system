@@ -131,9 +131,9 @@ with gr.Blocks(title="高校宿舍AI报修管理系统") as demo:
         with gr.TabItem("📝 报修提交"):
             gr.Markdown("## 提交报修申请")
             with gr.Row():
-                dorm_build = gr.Textbox(label="宿舍楼栋", placeholder="A栋", width=200)
-                dorm_room = gr.Textbox(label="宿舍房间号", placeholder="A0201", width=200)
-            fault_text = gr.Textbox(label="故障详细描述", lines=4, placeholder="空调不制冷/卫生间漏水/插座没电等", width=500)
+                dorm_build = gr.Textbox(label="宿舍楼栋", placeholder="A栋")
+                dorm_room = gr.Textbox(label="宿舍房间号", placeholder="A0201")
+            fault_text = gr.Textbox(label="故障详细描述", lines=4, placeholder="空调不制冷/卫生间漏水/插座没电等")
             submit_btn = gr.Button("AI智能识别并提交", variant="primary")
             result_out = gr.Textbox(label="提交结果", lines=8, interactive=False)
             submit_btn.click(submit_request, inputs=[dorm_build, dorm_room, fault_text], outputs=result_out)
@@ -144,7 +144,7 @@ with gr.Blocks(title="高校宿舍AI报修管理系统") as demo:
                 refresh_btn = gr.Button("刷新列表")
                 overdue_btn = gr.Button("查看超时工单")
             orders_df = gr.Dataframe(headers=["ID", "工单编号", "楼栋", "房间", "故障描述", "故障类型", "紧急等级", "状态", "提交时间", "处理人员"], 
-                                     interactive=False, height=300)
+                                     interactive=False)
             
             gr.Markdown("## 完成工单")
             with gr.Row():
@@ -158,7 +158,7 @@ with gr.Blocks(title="高校宿舍AI报修管理系统") as demo:
             
             gr.Markdown("## 维修人员状态")
             staff_df = gr.Dataframe(headers=["ID", "姓名", "电话", "技能", "状态", "当前工单"], 
-                                    interactive=False, height=200)
+                                    interactive=False)
             refresh_btn.click(load_staff, outputs=staff_df)
         
         with gr.TabItem("📊 数据分析"):
@@ -168,12 +168,12 @@ with gr.Blocks(title="高校宿舍AI报修管理系统") as demo:
             stats_text = gr.Textbox(label="统计概览", lines=10, interactive=False)
             
             gr.Markdown("### 工单分布")
-            pie_img = gr.Image(label="状态分布", height=300)
+            pie_img = gr.Image(label="状态分布")
             
             gr.Markdown("### 报修趋势")
-            trend_img = gr.Image(label="近7日趋势", height=300)
+            trend_img = gr.Image(label="近7日趋势")
             
             refresh_stats_btn.click(generate_stats, outputs=[stats_text, pie_img, trend_img])
 
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0")
+    demo.launch(server_name="0.0.0.0", server_port=7900)
