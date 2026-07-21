@@ -1,9 +1,12 @@
 from db import create_work_order, assign_work_order, complete_work_order, \
-    get_work_orders, get_pending_orders, get_overdue_orders, get_work_order_stats, get_repair_staff
+    get_work_orders, get_pending_orders, get_overdue_orders, get_work_order_stats, get_repair_staff, \
+    add_order_rating, check_duplicate_repair, search_orders
 from ai_engine import judge_dorm_fault
 
 def submit_repair_request(building, room, fault_desc):
     ai_result = judge_dorm_fault(building, room, fault_desc)
+    
+    duplicates = check_duplicate_repair(building, room, ai_result["fault_type"])
     
     order_id, order_no = create_work_order(
         building=building,
@@ -23,7 +26,8 @@ def submit_repair_request(building, room, fault_desc):
         "priority_level": ai_result["priority_level"],
         "handling_suggestion": ai_result["handling_suggestion"],
         "assigned_staff": assigned_staff,
-        "status": "processing" if assigned_staff else "pending"
+        "status": "processing" if assigned_staff else "pending",
+        "duplicates": duplicates
     }
 
 def get_all_orders():
@@ -41,8 +45,14 @@ def get_overdue():
 def mark_complete(order_id):
     complete_work_order(order_id)
 
+def submit_rating(order_id, rating, feedback):
+    add_order_rating(order_id, rating, feedback)
+
 def get_stats():
     return get_work_order_stats()
 
 def get_staff_list():
     return get_repair_staff()
+
+def search_by_building_room(building=None, room=None):
+    return search_orders(building, room)

@@ -6,6 +6,19 @@ DB_PATH = "dorm_management.db"
 
 def init_db():
     if os.path.exists(DB_PATH):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('ALTER TABLE work_orders ADD COLUMN rating INTEGER')
+        except:
+            pass
+        try:
+            cursor.execute('ALTER TABLE work_orders ADD COLUMN feedback TEXT')
+        except:
+            pass
+        conn.commit()
+        conn.close()
         return
     
     conn = sqlite3.connect(DB_PATH)
@@ -48,6 +61,8 @@ def init_db():
             assigned_time TIMESTAMP,
             completed_time TIMESTAMP,
             estimated_time TIMESTAMP,
+            rating INTEGER,
+            feedback TEXT,
             FOREIGN KEY (assigned_staff_id) REFERENCES repair_staff(id)
         )
     ''')
@@ -169,6 +184,61 @@ def complete_work_order(order_id):
     
     conn.close()
 
+def add_order_rating(order_id, rating, feedback):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('UPDATE work_orders SET rating = ?, feedback = ? WHERE id = ?', (rating, feedback, order_id))
+    conn.commit()
+    conn.close()
+
+def check_duplicate_repair(building, room, fault_type):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT id, order_no, submit_time, status 
+        FROM work_orders 
+        WHERE building = ? AND room = ? AND fault_type = ? 
+        AND submit_time > DATETIME('now', '-7 days')
+        ORDER BY submit_time DESC
+        LIMIT 3
+    ''', (building, room, fault_type))
+    
+    duplicates = cursor.fetchall()
+    conn.close()
+    
+    return duplicates
+
+def search_orders(building=None, room=None):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    query = '''
+        SELECT wo.id, wo.order_no, wo.building, wo.room, wo.fault_desc, wo.fault_type, 
+               wo.priority_level, wo.status, wo.submit_time, wo.assigned_time, wo.completed_time,
+               rs.name as staff_name, rs.phone as staff_phone
+        FROM work_orders wo
+        LEFT JOIN repair_staff rs ON wo.assigned_staff_id = rs.id
+        WHERE 1=1
+    '''
+    params = []
+    
+    if building:
+        query += ' AND wo.building LIKE ?'
+        params.append(f'%{building}%')
+    if room:
+        query += ' AND wo.room LIKE ?'
+        params.append(f'%{room}%')
+    
+    query += ' ORDER BY wo.submit_time DESC'
+    
+    cursor.execute(query, params)
+    orders = cursor.fetchall()
+    conn.close()
+    
+    return orders
+
 def get_work_orders(status=None):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -283,6 +353,12 @@ def get_work_order_stats():
     ''')
     building_stats = cursor.fetchall()
     
+    avg_rating = 0
+    cursor.execute('SELECT AVG(rating) FROM work_orders WHERE rating IS NOT NULL')
+    rating_result = cursor.fetchone()
+    if rating_result[0]:
+        avg_rating = round(rating_result[0], 1)
+    
     conn.close()
     
     return {
@@ -293,7 +369,8 @@ def get_work_order_stats():
         "fault_type_stats": fault_type_stats,
         "priority_stats": priority_stats,
         "daily_stats": daily_stats,
-        "building_stats": building_stats
+        "building_stats": building_stats,
+        "avg_rating": avg_rating
     }
 
 def get_repair_staff():
