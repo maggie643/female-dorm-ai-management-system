@@ -3,3 +3,4 @@ modelscope
 torch
 transformers
 accelerate
+matplotlib
