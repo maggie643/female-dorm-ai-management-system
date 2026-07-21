@@ -16,10 +16,15 @@ def load_model():
             _model = AutoModelForCausalLM.from_pretrained(
                 model_dir, device_map="auto", load_in_4bit=True
             )
-        except ImportError:
-            _model = AutoModelForCausalLM.from_pretrained(
-                model_dir, device_map="auto"
-            )
+        except Exception:
+            try:
+                _model = AutoModelForCausalLM.from_pretrained(
+                    model_dir, device_map="auto", load_in_8bit=True
+                )
+            except Exception:
+                _model = AutoModelForCausalLM.from_pretrained(
+                    model_dir, device_map="auto"
+                )
     return _model, _tokenizer
 
 def judge_dorm_fault(building, room, fault_desc):
