@@ -1,0 +1,5 @@
+gradio
+modelscope
+torch
+transformers
+accelerate
