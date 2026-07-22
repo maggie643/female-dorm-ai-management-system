@@ -176,12 +176,45 @@ def init_db():
         ("复旦大学", "张主任", "13900139003", "上海市杨浦区邯郸路220号",
          "周一至周五 6:00-23:00，周末 6:00-23:30", "禁止使用大功率电器", 800,
          "周三", "上午", "访客需登记", ""),
+        ("上海交通大学", "刘主任", "13900139004", "上海市闵行区东川路800号",
+         "周一至周五 6:00-23:00，周末 6:00-23:30", "禁止使用大功率电器", 800,
+         "周二", "下午", "访客需登记", ""),
+        ("浙江大学", "陈主任", "13900139005", "杭州市西湖区余杭塘路866号",
+         "周一至周五 6:00-23:00，周末 6:00-23:30", "禁止使用大功率电器", 800,
+         "周三", "下午", "访客需登记", ""),
+        ("南京大学", "赵主任", "13900139006", "南京市鼓楼区汉口路22号",
+         "周一至周五 6:00-23:00，周末 6:00-23:30", "禁止使用大功率电器", 800,
+         "周四", "下午", "访客需登记", ""),
+        ("武汉大学", "周主任", "13900139007", "武汉市武昌区珞珈山16号",
+         "周一至周五 6:00-23:00，周末 6:00-23:30", "禁止使用大功率电器", 800,
+         "周五", "下午", "访客需登记", ""),
+        ("四川大学", "吴主任", "13900139008", "成都市武侯区一环路南一段24号",
+         "周一至周五 6:00-23:00，周末 6:00-23:30", "禁止使用大功率电器", 800,
+         "周三", "上午", "访客需登记", ""),
+        ("中山大学", "徐主任", "13900139009", "广州市海珠区新港西路135号",
+         "周一至周五 6:00-23:00，周末 6:00-23:30", "禁止使用大功率电器", 800,
+         "周二", "下午", "访客需登记", ""),
+        ("西安交通大学", "孙主任", "13900139010", "西安市碑林区咸宁西路28号",
+         "周一至周五 6:00-23:00，周末 6:00-23:30", "禁止使用大功率电器", 800,
+         "周四", "下午", "访客需登记", ""),
         ("香港大学", "陈教授", "852-28592111", "香港薄扶林道",
          "周一至周五 7:00-22:30，周末 7:00-23:00", "禁止使用超过1000W电器", 1000,
          "周二", "下午", "访客需出示有效证件", ""),
+        ("香港中文大学", "王教授", "852-39437777", "香港沙田",
+         "周一至周五 7:00-22:30，周末 7:00-23:00", "禁止使用超过1000W电器", 1000,
+         "周三", "下午", "访客需出示有效证件", ""),
+        ("香港科技大学", "李教授", "852-23586000", "香港清水湾",
+         "周一至周五 7:00-22:30，周末 7:00-23:00", "禁止使用超过1000W电器", 1000,
+         "周四", "下午", "访客需出示有效证件", ""),
+        ("香港理工大学", "张教授", "852-27666666", "香港红磡",
+         "周一至周五 7:00-22:30，周末 7:00-23:00", "禁止使用超过1000W电器", 1000,
+         "周五", "下午", "访客需出示有效证件", ""),
         ("澳门大学", "刘教授", "+853-88228888", "澳门氹仔",
          "周一至周五 6:30-23:00，周末 6:30-23:30", "禁止使用大功率电器", 800,
-         "周五", "下午", "访客需提前预约", "")
+         "周五", "下午", "访客需提前预约", ""),
+        ("澳门科技大学", "赵教授", "+853-88972888", "澳门氹仔",
+         "周一至周五 6:30-23:00，周末 6:30-23:30", "禁止使用大功率电器", 800,
+         "周三", "下午", "访客需提前预约", "")
     ]
     cursor.executemany('''
         INSERT INTO schools VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -192,7 +225,9 @@ def init_db():
     default_buildings_pk = [
         (pk_id, "A栋", 6, 20, "A0101-A0620"),
         (pk_id, "B栋", 6, 20, "B0101-B0620"),
-        (pk_id, "C栋", 8, 24, "C0101-C0824")
+        (pk_id, "C栋", 8, 24, "C0101-C0824"),
+        (pk_id, "D栋", 6, 20, "D0101-D0620"),
+        (pk_id, "E栋", 8, 24, "E0101-E0824")
     ]
     cursor.executemany('INSERT INTO buildings VALUES (NULL, ?, ?, ?, ?, ?)', default_buildings_pk)
     
@@ -201,9 +236,71 @@ def init_db():
     default_buildings_qh = [
         (qh_id, "紫荆1号楼", 12, 24, "Z10101-Z11224"),
         (qh_id, "紫荆2号楼", 12, 24, "Z20101-Z21224"),
-        (qh_id, "紫荆3号楼", 12, 24, "Z30101-Z31224")
+        (qh_id, "紫荆3号楼", 12, 24, "Z30101-Z31224"),
+        (qh_id, "紫荆4号楼", 12, 24, "Z40101-Z41224"),
+        (qh_id, "紫荆5号楼", 12, 24, "Z50101-Z51224")
     ]
     cursor.executemany('INSERT INTO buildings VALUES (NULL, ?, ?, ?, ?, ?)', default_buildings_qh)
+    
+    cursor.execute('SELECT id FROM schools WHERE school_name = "复旦大学"')
+    fd_id = cursor.fetchone()[0]
+    default_buildings_fd = [
+        (fd_id, "东区1号楼", 6, 20, "E10101-E10620"),
+        (fd_id, "东区2号楼", 6, 20, "E20101-E20620"),
+        (fd_id, "西区1号楼", 8, 24, "W10101-W10824"),
+        (fd_id, "西区2号楼", 8, 24, "W20101-W20824")
+    ]
+    cursor.executemany('INSERT INTO buildings VALUES (NULL, ?, ?, ?, ?, ?)', default_buildings_fd)
+    
+    cursor.execute('SELECT id FROM schools WHERE school_name = "上海交通大学"')
+    sjtu_id = cursor.fetchone()[0]
+    default_buildings_sjtu = [
+        (sjtu_id, "东1号楼", 6, 20, "D10101-D10620"),
+        (sjtu_id, "东2号楼", 6, 20, "D20101-D20620"),
+        (sjtu_id, "西1号楼", 8, 24, "X10101-X10824"),
+        (sjtu_id, "西2号楼", 8, 24, "X20101-X20824")
+    ]
+    cursor.executemany('INSERT INTO buildings VALUES (NULL, ?, ?, ?, ?, ?)', default_buildings_sjtu)
+    
+    cursor.execute('SELECT id FROM schools WHERE school_name = "浙江大学"')
+    zju_id = cursor.fetchone()[0]
+    default_buildings_zju = [
+        (zju_id, "紫金港1号楼", 10, 24, "ZJ10101-ZJ11024"),
+        (zju_id, "紫金港2号楼", 10, 24, "ZJ20101-ZJ21024"),
+        (zju_id, "玉泉1号楼", 6, 20, "YQ10101-YQ10620"),
+        (zju_id, "玉泉2号楼", 6, 20, "YQ20101-YQ20620")
+    ]
+    cursor.executemany('INSERT INTO buildings VALUES (NULL, ?, ?, ?, ?, ?)', default_buildings_zju)
+    
+    cursor.execute('SELECT id FROM schools WHERE school_name = "香港大学"')
+    hku_id = cursor.fetchone()[0]
+    default_buildings_hku = [
+        (hku_id, "莫理斯堂", 8, 16, "M101-M816"),
+        (hku_id, "圣约翰堂", 8, 16, "SJ101-SJ816"),
+        (hku_id, "利玛窦堂", 6, 12, "RM101-RM612"),
+        (hku_id, "何东夫人堂", 6, 12, "HD101-HD612")
+    ]
+    cursor.executemany('INSERT INTO buildings VALUES (NULL, ?, ?, ?, ?, ?)', default_buildings_hku)
+    
+    cursor.execute('SELECT id FROM schools WHERE school_name = "香港中文大学"')
+    cuhk_id = cursor.fetchone()[0]
+    default_buildings_cuhk = [
+        (cuhk_id, "和声书院", 10, 20, "HS101-HS1020"),
+        (cuhk_id, "逸夫书院", 10, 20, "YF101-YF1020"),
+        (cuhk_id, "崇基学院", 8, 18, "CK101-CK818"),
+        (cuhk_id, "新亚书院", 8, 18, "XY101-XY818")
+    ]
+    cursor.executemany('INSERT INTO buildings VALUES (NULL, ?, ?, ?, ?, ?)', default_buildings_cuhk)
+    
+    cursor.execute('SELECT id FROM schools WHERE school_name = "澳门大学"')
+    umac_id = cursor.fetchone()[0]
+    default_buildings_umac = [
+        (umac_id, "东亚楼", 8, 16, "EA101-EA816"),
+        (umac_id, "横琴楼", 10, 20, "HQ101-HQ1020"),
+        (umac_id, "友谊楼", 8, 16, "YY101-YY816"),
+        (umac_id, "思源楼", 6, 12, "SY101-SY612")
+    ]
+    cursor.executemany('INSERT INTO buildings VALUES (NULL, ?, ?, ?, ?, ?)', default_buildings_umac)
     
     conn.commit()
     conn.close()
