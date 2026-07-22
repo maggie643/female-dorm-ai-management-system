@@ -1,7 +1,7 @@
 from db import create_work_order, assign_work_order, complete_work_order, \
     get_work_orders, get_pending_orders, get_overdue_orders, get_work_order_stats, get_repair_staff, \
     add_order_rating, check_duplicate_repair, search_orders, get_schools, get_school_contact
-from ai_engine import judge_dorm_fault
+from ai_engine import judge_dorm_fault, smart_qa, generate_weekly_report
 
 def submit_repair_request(school, building, room, fault_desc):
     ai_result = judge_dorm_fault(building, room, fault_desc)
@@ -63,3 +63,9 @@ def get_school_list():
 
 def search_by_building_room(school=None, building=None, room=None):
     return search_orders(school, building, room)
+
+def ask_question(question):
+    return smart_qa(question)
+
+def generate_report(stats_data):
+    return generate_weekly_report(stats_data)

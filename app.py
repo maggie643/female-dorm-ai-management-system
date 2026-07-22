@@ -2,7 +2,7 @@ import gradio as gr
 import matplotlib.pyplot as plt
 import csv
 import io
-from workflow import submit_repair_request, get_all_orders, get_overdue, mark_complete, get_stats, get_staff_list, submit_rating, search_by_building_room, get_school_list
+from workflow import submit_repair_request, get_all_orders, get_overdue, mark_complete, get_stats, get_staff_list, submit_rating, search_by_building_room, get_school_list, ask_question, generate_report
 
 plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
@@ -204,7 +204,7 @@ def generate_stats():
     
     plt.tight_layout()
     
-    return summary, fig, fig2, fig3, fig4
+    return summary, fig, fig2, fig3, fig4, stats
 
 def load_staff():
     staff = get_staff_list()
@@ -239,12 +239,31 @@ def export_orders_csv():
     
     return gr.File(label="工单数据导出", value=csv_data, file_name="work_orders_export.csv"), "✅ 工单数据已导出，请下载CSV文件"
 
+def chat_with_ai(question):
+    if not question:
+        return "请输入您的问题"
+    
+    try:
+        answer = ask_question(question)
+        return answer
+    except Exception as e:
+        return f"AI助手暂不可用，请稍后重试。错误：{str(e)[:100]}"
+
+def create_weekly_report():
+    try:
+        stats = get_stats()
+        report = generate_report(stats)
+        return report
+    except Exception as e:
+        return f"周报生成失败，请稍后重试。错误：{str(e)[:100]}"
+
 def update_role_visibility(role):
     if role == "学生":
         return [
             gr.update(visible=True),
             gr.update(visible=False),
             gr.update(visible=False),
+            gr.update(visible=True),
             gr.update(visible=True)
         ]
     elif role == "宿管":
@@ -252,6 +271,7 @@ def update_role_visibility(role):
             gr.update(visible=True),
             gr.update(visible=True),
             gr.update(visible=False),
+            gr.update(visible=True),
             gr.update(visible=True)
         ]
     else:
@@ -259,11 +279,13 @@ def update_role_visibility(role):
             gr.update(visible=True),
             gr.update(visible=True),
             gr.update(visible=True),
+            gr.update(visible=True),
             gr.update(visible=True)
         ]
 
-with gr.Blocks(title="高校宿舍AI报修管理系统") as demo:
-    gr.Markdown("# 🏠 高校宿舍智能报修AI管理平台")
+with gr.Blocks(title="高校宿舍AI运营管理系统") as demo:
+    gr.Markdown("# 🤖 高校宿舍AI运营管理平台")
+    gr.Markdown("### AI + 运营 / 「运营人，造自己的工具」")
     
     with gr.Row():
         role_dropdown = gr.Dropdown(["管理员", "宿管", "学生"], label="角色选择", value="管理员")
@@ -371,8 +393,113 @@ with gr.Blocks(title="高校宿舍AI报修管理系统") as demo:
             fault_img = gr.Plot(label="故障类型分布")
             
             refresh_stats_btn.click(generate_stats, outputs=[stats_text, pie_img, trend_img, building_img, fault_img])
+        
+        with gr.TabItem("🤖 AI智能助手") as tab_ai:
+            gr.Markdown("## AI智能问答助手")
+            gr.Markdown("💡 可以问关于宿舍管理规定、报修流程、安全须知等问题")
+            
+            chat_history = gr.Chatbot(height=400)
+            chat_input = gr.Textbox(label="输入问题", placeholder="门禁时间是什么时候？/ 大功率电器有哪些？/ 报修流程是怎样的？")
+            chat_btn = gr.Button("发送", variant="primary")
+            
+            def chat_with_history(message, history):
+                answer = chat_with_ai(message)
+                history.append((message, answer))
+                return "", history
+            
+            chat_btn.click(chat_with_history, inputs=[chat_input, chat_history], outputs=[chat_input, chat_history])
+            
+            gr.Markdown("## 📈 运营周报生成")
+            gr.Markdown("一键生成专业的运营周报，包含工作概览、关键指标、改进建议等")
+            
+            report_btn = gr.Button("生成周报", variant="secondary")
+            report_output = gr.Textbox(label="运营周报", lines=20, interactive=False)
+            
+            report_btn.click(create_weekly_report, outputs=report_output)
+        
+        with gr.TabItem("📊 运营仪表盘") as tab_dashboard:
+            gr.Markdown("## 🎯 运营数据驾驶舱")
+            refresh_dashboard_btn = gr.Button("刷新数据")
+            
+            with gr.Row():
+                with gr.Column():
+                    total_orders = gr.Number(label="🏛️ 总工单数", value=0)
+                with gr.Column():
+                    completed_rate = gr.Number(label="✅ 完成率(%)", value=0)
+                with gr.Column():
+                    avg_rating = gr.Number(label="⭐ 平均满意度", value=0)
+                with gr.Column():
+                    pending_count = gr.Number(label="⏳ 待分配", value=0)
+            
+            with gr.Row():
+                with gr.Column():
+                    fig_pie = gr.Plot(label="状态分布")
+                with gr.Column():
+                    fig_bar = gr.Plot(label="紧急等级")
+            
+            with gr.Row():
+                fig_trend = gr.Plot(label="近7日趋势")
+            
+            with gr.Row():
+                fig_building = gr.Plot(label="楼栋排行")
+            
+            def update_dashboard():
+                stats = get_stats()
+                total = stats["total"]
+                completed = stats["completed"]
+                processing = stats["processing"]
+                pending = stats["pending"]
+                avg_rating_val = stats.get("avg_rating", 0)
+                completion_rate_val = (completed/total*100) if total > 0 else 0
+                
+                fig1, axes = plt.subplots(figsize=(6, 6))
+                status_labels = ['已完成', '处理中', '待分配']
+                status_values = [completed, processing, pending]
+                colors = ['#4CAF50', '#2196F3', '#FF9800']
+                axes.pie(status_values, labels=status_labels, autopct='%1.1f%%', startangle=90, colors=colors)
+                axes.set_title('工单状态分布')
+                plt.tight_layout()
+                
+                fig2, ax2 = plt.subplots(figsize=(6, 6))
+                if stats["priority_stats"]:
+                    priority_labels = [p[0] for p in stats["priority_stats"]]
+                    priority_values = [p[1] for p in stats["priority_stats"]]
+                    priority_colors = ['#F44336', '#FF9800', '#2196F3']
+                    ax2.bar(priority_labels, priority_values, color=priority_colors)
+                    ax2.set_title('紧急等级分布')
+                    ax2.set_ylabel('工单数量')
+                plt.tight_layout()
+                
+                fig3, ax3 = plt.subplots(figsize=(10, 4))
+                if stats["daily_stats"]:
+                    dates = [d[0] for d in stats["daily_stats"]][::-1]
+                    counts = [d[1] for d in stats["daily_stats"]][::-1]
+                    ax3.plot(dates, counts, marker='o', linestyle='-', color='#2196F3', linewidth=2)
+                    ax3.fill_between(dates, counts, alpha=0.3, color='#2196F3')
+                    ax3.set_title('近7日报修趋势')
+                    ax3.set_xlabel('日期')
+                    ax3.set_ylabel('报修数量')
+                    ax3.tick_params(axis='x', rotation=45)
+                plt.tight_layout()
+                
+                fig4, ax4 = plt.subplots(figsize=(10, 4))
+                if stats["building_stats"]:
+                    buildings = [b[0] for b in stats["building_stats"]][:8]
+                    counts = [b[1] for b in stats["building_stats"]][:8]
+                    bars = ax4.barh(buildings, counts, color='#9C27B0')
+                    ax4.set_title('楼栋报修排行')
+                    ax4.set_xlabel('报修数量')
+                    ax4.set_ylabel('楼栋')
+                    for bar in bars:
+                        width = bar.get_width()
+                        ax4.text(width + 0.5, bar.get_y() + bar.get_height()/2, f'{int(width)}', va='center')
+                plt.tight_layout()
+                
+                return total, round(completion_rate_val, 1), avg_rating_val, pending, fig1, fig2, fig3, fig4
+            
+            refresh_dashboard_btn.click(update_dashboard, outputs=[total_orders, completed_rate, avg_rating, pending_count, fig_pie, fig_bar, fig_trend, fig_building])
     
-    role_dropdown.change(update_role_visibility, inputs=[role_dropdown], outputs=[tab_repair, tab_management, tab_analysis])
+    role_dropdown.change(update_role_visibility, inputs=[role_dropdown], outputs=[tab_repair, tab_management, tab_analysis, tab_ai, tab_dashboard])
 
 if __name__ == "__main__":
     demo.launch(
