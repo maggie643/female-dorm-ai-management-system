@@ -2,14 +2,14 @@ import gradio as gr
 import matplotlib.pyplot as plt
 import csv
 import io
-from workflow import submit_repair_request, get_all_orders, get_overdue, mark_complete, get_stats, get_staff_list, submit_rating, search_by_building_room, get_school_list, ask_question, generate_report
+from workflow import submit_repair_request, get_all_orders, get_overdue, mark_complete, get_stats, get_staff_list, submit_rating, search_by_building_room, get_school_list, ask_question, generate_report, register_school, get_school_settings, add_building_to_school, get_school_buildings, get_school_building_names, get_school_building_detail
 
 plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
 def get_schools_for_dropdown():
     schools = get_school_list()
-    return schools if schools else ["北京大学", "清华大学", "复旦大学", "香港大学", "澳门大学"]
+    return schools if schools else []
 
 def submit_request(school, building, room, fault_desc):
     if not school or not building or not room or not fault_desc:
@@ -239,12 +239,13 @@ def export_orders_csv():
     
     return gr.File(label="工单数据导出", value=csv_data, file_name="work_orders_export.csv"), "✅ 工单数据已导出，请下载CSV文件"
 
-def chat_with_ai(question):
+def chat_with_ai(question, school_name):
     if not question:
         return "请输入您的问题"
     
     try:
-        answer = ask_question(question)
+        school_config = get_school_settings(school_name) if school_name else None
+        answer = ask_question(question, school_config)
         return answer
     except Exception as e:
         return f"AI助手暂不可用，请稍后重试。错误：{str(e)[:100]}"
@@ -257,6 +258,56 @@ def create_weekly_report():
     except Exception as e:
         return f"周报生成失败，请稍后重试。错误：{str(e)[:100]}"
 
+def register_new_school(school_name, contact_name, contact_phone, address, dorm_access_time, 
+                        electricity_rules, max_power_watts, hygiene_check_day, hygiene_check_time, 
+                        visitor_rules, other_rules):
+    if not school_name:
+        return "请输入学校名称"
+    
+    try:
+        register_school(school_name, contact_name, contact_phone, address,
+                        dorm_access_time, electricity_rules, max_power_watts,
+                        hygiene_check_day, hygiene_check_time, visitor_rules, other_rules)
+        return f"✅ 学校「{school_name}」注册成功！"
+    except Exception as e:
+        return f"❌ 注册失败：{str(e)}"
+
+def add_new_building(school_name, building_name, total_floors, rooms_per_floor, room_number_format):
+    if not school_name or not building_name:
+        return "请填写学校名称和楼栋名称"
+    
+    try:
+        success = add_building_to_school(school_name, building_name, total_floors, rooms_per_floor, room_number_format)
+        if success:
+            return f"✅ 楼栋「{building_name}」添加成功！"
+        else:
+            return f"❌ 添加失败：学校「{school_name}」不存在，请先注册学校"
+    except Exception as e:
+        return f"❌ 添加失败：{str(e)}"
+
+def load_buildings_for_school(school_name):
+    if not school_name:
+        return []
+    return get_school_building_names(school_name)
+
+def load_building_detail(school_name, building_name):
+    if not school_name or not building_name:
+        return ""
+    
+    info = get_school_building_detail(school_name, building_name)
+    if info:
+        total_floors, rooms_per_floor, room_format = info
+        return f"""
+🏢 楼栋信息
+
+名称：{building_name}
+总楼层：{total_floors}层
+每层房间数：{rooms_per_floor}间
+房间编号格式：{room_format}
+总房间数：{total_floors * rooms_per_floor}间
+"""
+    return "未找到该楼栋信息"
+
 def update_role_visibility(role):
     if role == "学生":
         return [
@@ -264,7 +315,8 @@ def update_role_visibility(role):
             gr.update(visible=False),
             gr.update(visible=False),
             gr.update(visible=True),
-            gr.update(visible=True)
+            gr.update(visible=True),
+            gr.update(visible=False)
         ]
     elif role == "宿管":
         return [
@@ -272,10 +324,12 @@ def update_role_visibility(role):
             gr.update(visible=True),
             gr.update(visible=False),
             gr.update(visible=True),
-            gr.update(visible=True)
+            gr.update(visible=True),
+            gr.update(visible=False)
         ]
     else:
         return [
+            gr.update(visible=True),
             gr.update(visible=True),
             gr.update(visible=True),
             gr.update(visible=True),
@@ -289,11 +343,27 @@ with gr.Blocks(title="高校宿舍AI运营管理系统") as demo:
     
     with gr.Row():
         role_dropdown = gr.Dropdown(["管理员", "宿管", "学生"], label="角色选择", value="管理员")
-        school_dropdown = gr.Dropdown(get_schools_for_dropdown(), label="选择高校", value="北京大学")
     
     with gr.Tabs() as tabs:
         with gr.TabItem("📝 报修提交") as tab_repair:
             gr.Markdown("## 提交报修申请")
+            
+            school_input = gr.Textbox(label="🏫 学校名称", placeholder="请输入学校名称，如：北京大学", value="")
+            building_dropdown = gr.Dropdown([], label="🏢 宿舍楼栋", placeholder="请先输入学校名称")
+            building_detail = gr.Textbox(label="楼栋详情", interactive=False)
+            
+            def on_school_change(school):
+                buildings = load_buildings_for_school(school)
+                if buildings:
+                    return gr.update(choices=buildings, value=buildings[0]), ""
+                return gr.update(choices=[], value=""), ""
+            
+            school_input.change(on_school_change, inputs=[school_input], outputs=[building_dropdown, building_detail])
+            
+            def on_building_change(school, building):
+                return load_building_detail(school, building)
+            
+            building_dropdown.change(on_building_change, inputs=[school_input, building_dropdown], outputs=[building_detail])
             
             gr.Markdown("### 🚨 紧急等级说明")
             gr.Markdown("""
@@ -305,7 +375,7 @@ with gr.Blocks(title="高校宿舍AI运营管理系统") as demo:
 """)
             
             with gr.Row():
-                dorm_build = gr.Textbox(label="宿舍楼栋", placeholder="A栋")
+                dorm_build_input = gr.Textbox(label="自定义楼栋（如未找到）", placeholder="A栋")
                 dorm_room = gr.Textbox(label="宿舍房间号", placeholder="A0201")
             fault_text = gr.Textbox(label="故障详细描述", lines=4, placeholder="空调不制冷/卫生间漏水/插座没电等")
             submit_btn = gr.Button("AI智能识别并提交", variant="primary")
@@ -324,8 +394,13 @@ with gr.Blocks(title="高校宿舍AI运营管理系统") as demo:
             my_orders_df = gr.Dataframe(headers=["ID", "工单编号", "高校", "楼栋", "房间", "故障描述", "故障类型", "紧急等级", "状态", "提交时间", "处理人员", "联系电话"], 
                                        interactive=False)
             
-            submit_btn.click(submit_request, inputs=[school_dropdown, dorm_build, dorm_room, fault_text], outputs=[student_result, teacher_result])
-            my_search_btn.click(get_my_orders, inputs=[school_dropdown, my_build, my_room], outputs=my_orders_df)
+            def submit_with_school(building_dropdown_val, building_input_val, room, fault_desc):
+                building = building_dropdown_val if building_dropdown_val else building_input_val
+                return submit_request(school_input.value, building, room, fault_desc)
+            
+            submit_btn.click(submit_request, inputs=[school_input, gr.Textbox(value=lambda: building_dropdown.value or dorm_build_input.value), dorm_room, fault_text], 
+                            outputs=[student_result, teacher_result])
+            my_search_btn.click(get_my_orders, inputs=[school_input, my_build, my_room], outputs=my_orders_df)
         
         with gr.TabItem("📋 工单管理") as tab_management:
             gr.Markdown("## 工单列表")
@@ -398,12 +473,13 @@ with gr.Blocks(title="高校宿舍AI运营管理系统") as demo:
             gr.Markdown("## AI智能问答助手")
             gr.Markdown("💡 可以问关于宿舍管理规定、报修流程、安全须知等问题")
             
+            ai_school_input = gr.Textbox(label="🏫 当前学校", placeholder="请输入学校名称以获取该校的管理规定", value="")
             chat_history = gr.Chatbot(height=400)
             chat_input = gr.Textbox(label="输入问题", placeholder="门禁时间是什么时候？/ 大功率电器有哪些？/ 报修流程是怎样的？")
             chat_btn = gr.Button("发送", variant="primary")
             
             def chat_with_history(message, history):
-                answer = chat_with_ai(message)
+                answer = chat_with_ai(message, ai_school_input.value)
                 history.append((message, answer))
                 return "", history
             
@@ -498,8 +574,63 @@ with gr.Blocks(title="高校宿舍AI运营管理系统") as demo:
                 return total, round(completion_rate_val, 1), avg_rating_val, pending, fig1, fig2, fig3, fig4
             
             refresh_dashboard_btn.click(update_dashboard, outputs=[total_orders, completed_rate, avg_rating, pending_count, fig_pie, fig_bar, fig_trend, fig_building])
+        
+        with gr.TabItem("🏫 学校管理") as tab_school:
+            gr.Markdown("## 学校注册")
+            gr.Markdown("管理员可以注册新学校并配置宿舍管理规定")
+            
+            with gr.Row():
+                reg_school_name = gr.Textbox(label="学校名称", placeholder="请输入学校名称")
+                reg_contact_name = gr.Textbox(label="负责人姓名", placeholder="负责人姓名")
+                reg_contact_phone = gr.Textbox(label="联系电话", placeholder="联系电话")
+            
+            with gr.Row():
+                reg_address = gr.Textbox(label="学校地址", placeholder="学校地址")
+            
+            gr.Markdown("### 宿舍管理规定")
+            
+            with gr.Row():
+                reg_dorm_access = gr.Textbox(label="门禁时间", placeholder="如：周一至周五 6:00-23:00，周末 6:00-23:30", value="周一至周五 6:00-23:00，周末 6:00-23:30")
+                reg_electricity = gr.Textbox(label="用电规定", placeholder="如：禁止使用大功率电器", value="禁止使用大功率电器")
+            
+            with gr.Row():
+                reg_max_power = gr.Number(label="最大功率限制(W)", value=800)
+                reg_hygiene_day = gr.Textbox(label="卫生检查日期", placeholder="如：周三", value="周三")
+                reg_hygiene_time = gr.Textbox(label="卫生检查时间", placeholder="如：下午", value="下午")
+            
+            with gr.Row():
+                reg_visitor = gr.Textbox(label="访客规定", placeholder="如：访客需在宿管处登记身份证信息", value="访客需在宿管处登记身份证信息")
+                reg_other = gr.Textbox(label="其他规定", placeholder="其他管理规定")
+            
+            reg_result = gr.Textbox(label="注册结果", interactive=False)
+            reg_btn = gr.Button("注册学校", variant="primary")
+            
+            reg_btn.click(register_new_school, inputs=[reg_school_name, reg_contact_name, reg_contact_phone, reg_address,
+                                                      reg_dorm_access, reg_electricity, reg_max_power,
+                                                      reg_hygiene_day, reg_hygiene_time, reg_visitor, reg_other],
+                         outputs=[reg_result])
+            
+            gr.Markdown("---")
+            gr.Markdown("## 添加楼栋")
+            gr.Markdown("为已注册的学校添加宿舍楼栋")
+            
+            with gr.Row():
+                add_school_name = gr.Textbox(label="学校名称", placeholder="请输入已注册的学校名称")
+                add_building_name = gr.Textbox(label="楼栋名称", placeholder="如：A栋")
+            
+            with gr.Row():
+                add_total_floors = gr.Number(label="总楼层数", value=6)
+                add_rooms_per_floor = gr.Number(label="每层房间数", value=20)
+                add_room_format = gr.Textbox(label="房间编号格式", placeholder="如：A0101-A0620", value="A0101-A0620")
+            
+            add_result = gr.Textbox(label="添加结果", interactive=False)
+            add_btn = gr.Button("添加楼栋", variant="secondary")
+            
+            add_btn.click(add_new_building, inputs=[add_school_name, add_building_name, add_total_floors, 
+                                                   add_rooms_per_floor, add_room_format],
+                         outputs=[add_result])
     
-    role_dropdown.change(update_role_visibility, inputs=[role_dropdown], outputs=[tab_repair, tab_management, tab_analysis, tab_ai, tab_dashboard])
+    role_dropdown.change(update_role_visibility, inputs=[role_dropdown], outputs=[tab_repair, tab_management, tab_analysis, tab_ai, tab_dashboard, tab_school])
 
 if __name__ == "__main__":
     demo.launch(

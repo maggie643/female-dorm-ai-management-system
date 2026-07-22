@@ -66,10 +66,33 @@ def judge_dorm_fault(building, room, fault_desc):
         "raw_response": response_text
     }
 
-def smart_qa(question):
+def smart_qa(question, school_config=None):
     model, tokenizer = load_model()
     
-    knowledge_base = """
+    if school_config:
+        knowledge_base = f"""
+【宿舍管理规定】
+1. 门禁时间：{school_config.get('dorm_access_time', '6:00-23:00')}
+2. 用电规定：{school_config.get('electricity_rules', '禁止使用大功率电器')}（超过{school_config.get('max_power_watts', 800)}W）
+3. 卫生检查：每周{school_config.get('hygiene_check_day', '周三')}{school_config.get('hygiene_check_time', '下午')}进行宿舍卫生检查
+4. 访客登记：{school_config.get('visitor_rules', '访客需在宿管处登记')}
+5. 报修流程：学生通过系统提交报修 → AI自动分类 → 派单维修 → 验收评价
+
+【报修常见问题】
+1. P0紧急报修：断电、漏水、火灾隐患等，30分钟内响应
+2. P1重要报修：空调故障、热水器故障等，1小时内响应
+3. P2普通报修：灯具损坏、网络故障等，2小时内响应
+
+【安全须知】
+1. 离开宿舍请关闭电源、锁好门窗
+2. 禁止私拉乱接电线
+3. 发现安全隐患请立即拨打紧急电话
+
+【其他规定】
+{school_config.get('other_rules', '')}
+"""
+    else:
+        knowledge_base = """
 【宿舍管理规定】
 1. 门禁时间：周一至周五 6:00-23:00，周末 6:00-23:30
 2. 用电规定：禁止使用大功率电器（超过800W），如电水壶、电磁炉等

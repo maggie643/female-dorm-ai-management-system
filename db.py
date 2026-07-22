@@ -22,34 +22,45 @@ def init_db():
         except:
             pass
         try:
+            cursor.execute('ALTER TABLE schools ADD COLUMN dorm_access_time TEXT')
+        except:
+            pass
+        try:
+            cursor.execute('ALTER TABLE schools ADD COLUMN electricity_rules TEXT')
+        except:
+            pass
+        try:
+            cursor.execute('ALTER TABLE schools ADD COLUMN max_power_watts INTEGER')
+        except:
+            pass
+        try:
+            cursor.execute('ALTER TABLE schools ADD COLUMN hygiene_check_day TEXT')
+        except:
+            pass
+        try:
+            cursor.execute('ALTER TABLE schools ADD COLUMN hygiene_check_time TEXT')
+        except:
+            pass
+        try:
+            cursor.execute('ALTER TABLE schools ADD COLUMN visitor_rules TEXT')
+        except:
+            pass
+        try:
+            cursor.execute('ALTER TABLE schools ADD COLUMN other_rules TEXT')
+        except:
+            pass
+        try:
             cursor.execute('''
-                CREATE TABLE schools (
+                CREATE TABLE buildings (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    school_name TEXT NOT NULL UNIQUE,
-                    contact_name TEXT,
-                    contact_phone TEXT,
-                    address TEXT
+                    school_id INTEGER,
+                    building_name TEXT NOT NULL,
+                    total_floors INTEGER,
+                    rooms_per_floor INTEGER,
+                    room_number_format TEXT,
+                    FOREIGN KEY (school_id) REFERENCES schools(id)
                 )
             ''')
-            default_schools = [
-                ("北京大学", "王主任", "13900139001", "北京市海淀区颐和园路5号"),
-                ("清华大学", "李主任", "13900139002", "北京市海淀区清华园1号"),
-                ("复旦大学", "张主任", "13900139003", "上海市杨浦区邯郸路220号"),
-                ("上海交通大学", "刘主任", "13900139004", "上海市闵行区东川路800号"),
-                ("浙江大学", "陈主任", "13900139005", "杭州市西湖区余杭塘路866号"),
-                ("南京大学", "赵主任", "13900139006", "南京市鼓楼区汉口路22号"),
-                ("武汉大学", "周主任", "13900139007", "武汉市武昌区珞珈山16号"),
-                ("四川大学", "吴主任", "13900139008", "成都市武侯区一环路南一段24号"),
-                ("中山大学", "徐主任", "13900139009", "广州市海珠区新港西路135号"),
-                ("西安交通大学", "孙主任", "13900139010", "西安市碑林区咸宁西路28号"),
-                ("香港大学", "陈教授", "852-28592111", "香港薄扶林道"),
-                ("香港中文大学", "王教授", "852-39437777", "香港沙田"),
-                ("香港科技大学", "李教授", "852-23586000", "香港清水湾"),
-                ("香港理工大学", "张教授", "852-27666666", "香港红磡"),
-                ("澳门大学", "刘教授", "+853-88228888", "澳门氹仔"),
-                ("澳门科技大学", "赵教授", "+853-88972888", "澳门氹仔")
-            ]
-            cursor.executemany('INSERT INTO schools VALUES (NULL, ?, ?, ?, ?)', default_schools)
         except:
             pass
         conn.commit()
@@ -65,7 +76,26 @@ def init_db():
             school_name TEXT NOT NULL UNIQUE,
             contact_name TEXT,
             contact_phone TEXT,
-            address TEXT
+            address TEXT,
+            dorm_access_time TEXT,
+            electricity_rules TEXT,
+            max_power_watts INTEGER,
+            hygiene_check_day TEXT,
+            hygiene_check_time TEXT,
+            visitor_rules TEXT,
+            other_rules TEXT
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE buildings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_id INTEGER,
+            building_name TEXT NOT NULL,
+            total_floors INTEGER,
+            rooms_per_floor INTEGER,
+            room_number_format TEXT,
+            FOREIGN KEY (school_id) REFERENCES schools(id)
         )
     ''')
     
@@ -113,26 +143,6 @@ def init_db():
         )
     ''')
     
-    default_schools = [
-        ("北京大学", "王主任", "13900139001", "北京市海淀区颐和园路5号"),
-        ("清华大学", "李主任", "13900139002", "北京市海淀区清华园1号"),
-        ("复旦大学", "张主任", "13900139003", "上海市杨浦区邯郸路220号"),
-        ("上海交通大学", "刘主任", "13900139004", "上海市闵行区东川路800号"),
-        ("浙江大学", "陈主任", "13900139005", "杭州市西湖区余杭塘路866号"),
-        ("南京大学", "赵主任", "13900139006", "南京市鼓楼区汉口路22号"),
-        ("武汉大学", "周主任", "13900139007", "武汉市武昌区珞珈山16号"),
-        ("四川大学", "吴主任", "13900139008", "成都市武侯区一环路南一段24号"),
-        ("中山大学", "徐主任", "13900139009", "广州市海珠区新港西路135号"),
-        ("西安交通大学", "孙主任", "13900139010", "西安市碑林区咸宁西路28号"),
-        ("香港大学", "陈教授", "852-28592111", "香港薄扶林道"),
-        ("香港中文大学", "王教授", "852-39437777", "香港沙田"),
-        ("香港科技大学", "李教授", "852-23586000", "香港清水湾"),
-        ("香港理工大学", "张教授", "852-27666666", "香港红磡"),
-        ("澳门大学", "刘教授", "+853-88228888", "澳门氹仔"),
-        ("澳门科技大学", "赵教授", "+853-88972888", "澳门氹仔")
-    ]
-    cursor.executemany('INSERT INTO schools VALUES (NULL, ?, ?, ?, ?)', default_schools)
-    
     default_fault_types = [
         ("空调故障", "P0", 30, "空调维修"),
         ("热水器故障", "P0", 60, "水电维修"),
@@ -162,6 +172,57 @@ def init_db():
 def get_db_connection():
     return sqlite3.connect(DB_PATH)
 
+def add_school(school_name, contact_name="", contact_phone="", address="", 
+               dorm_access_time="", electricity_rules="", max_power_watts=800,
+               hygiene_check_day="周三", hygiene_check_time="下午", visitor_rules="", other_rules=""):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        INSERT OR REPLACE INTO schools 
+        (school_name, contact_name, contact_phone, address, dorm_access_time, 
+         electricity_rules, max_power_watts, hygiene_check_day, hygiene_check_time, 
+         visitor_rules, other_rules)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (school_name, contact_name, contact_phone, address, dorm_access_time, 
+          electricity_rules, max_power_watts, hygiene_check_day, hygiene_check_time, 
+          visitor_rules, other_rules))
+    
+    school_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return school_id
+
+def get_school_by_name(school_name):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM schools WHERE school_name = ?', (school_name,))
+    result = cursor.fetchone()
+    conn.close()
+    return result
+
+def get_school_config(school_name):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT dorm_access_time, electricity_rules, max_power_watts, 
+               hygiene_check_day, hygiene_check_time, visitor_rules, other_rules
+        FROM schools WHERE school_name = ?
+    ''', (school_name,))
+    result = cursor.fetchone()
+    conn.close()
+    if result:
+        return {
+            "dorm_access_time": result[0] or "6:00-23:00",
+            "electricity_rules": result[1] or "禁止使用大功率电器",
+            "max_power_watts": result[2] or 800,
+            "hygiene_check_day": result[3] or "周三",
+            "hygiene_check_time": result[4] or "下午",
+            "visitor_rules": result[5] or "访客需在宿管处登记",
+            "other_rules": result[6] or ""
+        }
+    return None
+
 def get_schools():
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -174,6 +235,65 @@ def get_school_contact(school_name):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('SELECT contact_name, contact_phone, address FROM schools WHERE school_name = ?', (school_name,))
+    result = cursor.fetchone()
+    conn.close()
+    return result
+
+def add_building(school_id, building_name, total_floors, rooms_per_floor, room_number_format):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        INSERT INTO buildings (school_id, building_name, total_floors, rooms_per_floor, room_number_format)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (school_id, building_name, total_floors, rooms_per_floor, room_number_format))
+    
+    conn.commit()
+    conn.close()
+
+def get_buildings_by_school(school_name):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT b.building_name, b.total_floors, b.rooms_per_floor, b.room_number_format
+        FROM buildings b
+        JOIN schools s ON b.school_id = s.id
+        WHERE s.school_name = ?
+        ORDER BY b.building_name
+    ''', (school_name,))
+    
+    buildings = cursor.fetchall()
+    conn.close()
+    return buildings
+
+def get_building_names_by_school(school_name):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT b.building_name
+        FROM buildings b
+        JOIN schools s ON b.school_id = s.id
+        WHERE s.school_name = ?
+        ORDER BY b.building_name
+    ''', (school_name,))
+    
+    names = [b[0] for b in cursor.fetchall()]
+    conn.close()
+    return names
+
+def get_building_info(school_name, building_name):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT b.total_floors, b.rooms_per_floor, b.room_number_format
+        FROM buildings b
+        JOIN schools s ON b.school_id = s.id
+        WHERE s.school_name = ? AND b.building_name = ?
+    ''', (school_name, building_name))
+    
     result = cursor.fetchone()
     conn.close()
     return result
