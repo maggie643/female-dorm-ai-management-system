@@ -17,12 +17,51 @@ def init_db():
             cursor.execute('ALTER TABLE work_orders ADD COLUMN feedback TEXT')
         except:
             pass
+        try:
+            cursor.execute('ALTER TABLE work_orders ADD COLUMN school TEXT')
+        except:
+            pass
+        try:
+            cursor.execute('''
+                CREATE TABLE schools (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    school_name TEXT NOT NULL UNIQUE,
+                    contact_name TEXT,
+                    contact_phone TEXT,
+                    address TEXT
+                )
+            ''')
+            default_schools = [
+                ("北京大学", "王主任", "13900139001", "北京市海淀区颐和园路5号"),
+                ("清华大学", "李主任", "13900139002", "北京市海淀区清华园1号"),
+                ("复旦大学", "张主任", "13900139003", "上海市杨浦区邯郸路220号"),
+                ("上海交通大学", "刘主任", "13900139004", "上海市闵行区东川路800号"),
+                ("浙江大学", "陈主任", "13900139005", "杭州市西湖区余杭塘路866号"),
+                ("南京大学", "赵主任", "13900139006", "南京市鼓楼区汉口路22号"),
+                ("武汉大学", "周主任", "13900139007", "武汉市武昌区珞珈山16号"),
+                ("四川大学", "吴主任", "13900139008", "成都市武侯区一环路南一段24号"),
+                ("中山大学", "徐主任", "13900139009", "广州市海珠区新港西路135号"),
+                ("西安交通大学", "孙主任", "13900139010", "西安市碑林区咸宁西路28号")
+            ]
+            cursor.executemany('INSERT INTO schools VALUES (NULL, ?, ?, ?, ?)', default_schools)
+        except:
+            pass
         conn.commit()
         conn.close()
         return
     
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+    
+    cursor.execute('''
+        CREATE TABLE schools (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            school_name TEXT NOT NULL UNIQUE,
+            contact_name TEXT,
+            contact_phone TEXT,
+            address TEXT
+        )
+    ''')
     
     cursor.execute('''
         CREATE TABLE fault_types (
@@ -49,6 +88,7 @@ def init_db():
         CREATE TABLE work_orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             order_no TEXT NOT NULL UNIQUE,
+            school TEXT,
             building TEXT NOT NULL,
             room TEXT NOT NULL,
             fault_desc TEXT NOT NULL,
@@ -66,6 +106,20 @@ def init_db():
             FOREIGN KEY (assigned_staff_id) REFERENCES repair_staff(id)
         )
     ''')
+    
+    default_schools = [
+        ("北京大学", "王主任", "13900139001", "北京市海淀区颐和园路5号"),
+        ("清华大学", "李主任", "13900139002", "北京市海淀区清华园1号"),
+        ("复旦大学", "张主任", "13900139003", "上海市杨浦区邯郸路220号"),
+        ("上海交通大学", "刘主任", "13900139004", "上海市闵行区东川路800号"),
+        ("浙江大学", "陈主任", "13900139005", "杭州市西湖区余杭塘路866号"),
+        ("南京大学", "赵主任", "13900139006", "南京市鼓楼区汉口路22号"),
+        ("武汉大学", "周主任", "13900139007", "武汉市武昌区珞珈山16号"),
+        ("四川大学", "吴主任", "13900139008", "成都市武侯区一环路南一段24号"),
+        ("中山大学", "徐主任", "13900139009", "广州市海珠区新港西路135号"),
+        ("西安交通大学", "孙主任", "13900139010", "西安市碑林区咸宁西路28号")
+    ]
+    cursor.executemany('INSERT INTO schools VALUES (NULL, ?, ?, ?, ?)', default_schools)
     
     default_fault_types = [
         ("空调故障", "P0", 30, "空调维修"),
@@ -96,7 +150,23 @@ def init_db():
 def get_db_connection():
     return sqlite3.connect(DB_PATH)
 
-def create_work_order(building, room, fault_desc, fault_type, priority_level, handling_suggestion):
+def get_schools():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT school_name FROM schools ORDER BY school_name')
+    schools = [s[0] for s in cursor.fetchall()]
+    conn.close()
+    return schools
+
+def get_school_contact(school_name):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT contact_name, contact_phone, address FROM schools WHERE school_name = ?', (school_name,))
+    result = cursor.fetchone()
+    conn.close()
+    return result
+
+def create_work_order(school, building, room, fault_desc, fault_type, priority_level, handling_suggestion):
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -106,10 +176,10 @@ def create_work_order(building, room, fault_desc, fault_type, priority_level, ha
     handling_time = priority_map.get(priority_level, 120)
     
     cursor.execute('''
-        INSERT INTO work_orders (order_no, building, room, fault_desc, fault_type, 
+        INSERT INTO work_orders (order_no, school, building, room, fault_desc, fault_type, 
                                 priority_level, handling_suggestion, estimated_time)
-        VALUES (?, ?, ?, ?, ?, ?, ?, DATETIME('now', ?))
-    ''', (order_no, building, room, fault_desc, fault_type, priority_level, 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, DATETIME('now', ?))
+    ''', (order_no, school, building, room, fault_desc, fault_type, priority_level, 
           handling_suggestion, f"+{handling_time} minutes"))
     
     order_id = cursor.lastrowid
@@ -137,7 +207,7 @@ def assign_work_order(order_id):
     primary_skill = required_skill.split(",")[0] if required_skill else ""
     
     cursor.execute('''
-        SELECT id, name, skills FROM repair_staff 
+        SELECT id, name, skills, phone FROM repair_staff 
         WHERE status = 'available' AND skills LIKE ?
         ORDER BY CASE WHEN skills LIKE ? THEN 0 ELSE 1 END, id
         LIMIT 1
@@ -146,24 +216,24 @@ def assign_work_order(order_id):
     staff = cursor.fetchone()
     
     if staff:
-        staff_id, staff_name, _ = staff
+        staff_id, staff_name, staff_skills, staff_phone = staff
         cursor.execute('UPDATE repair_staff SET status = "busy", current_order_id = ? WHERE id = ?', (order_id, staff_id))
         cursor.execute('UPDATE work_orders SET status = "processing", assigned_staff_id = ?, assigned_time = CURRENT_TIMESTAMP WHERE id = ?', (staff_id, order_id))
         conn.commit()
-        result = {"staff_id": staff_id, "staff_name": staff_name}
+        result = {"staff_id": staff_id, "staff_name": staff_name, "staff_phone": staff_phone}
     else:
         cursor.execute('''
-            SELECT id, name FROM repair_staff 
+            SELECT id, name, phone FROM repair_staff 
             WHERE status = 'available' 
             ORDER BY id LIMIT 1
         ''')
         fallback_staff = cursor.fetchone()
         if fallback_staff:
-            staff_id, staff_name = fallback_staff
+            staff_id, staff_name, staff_phone = fallback_staff
             cursor.execute('UPDATE repair_staff SET status = "busy", current_order_id = ? WHERE id = ?', (order_id, staff_id))
             cursor.execute('UPDATE work_orders SET status = "processing", assigned_staff_id = ?, assigned_time = CURRENT_TIMESTAMP WHERE id = ?', (staff_id, order_id))
             conn.commit()
-            result = {"staff_id": staff_id, "staff_name": staff_name}
+            result = {"staff_id": staff_id, "staff_name": staff_name, "staff_phone": staff_phone}
         else:
             result = None
     
@@ -210,12 +280,12 @@ def check_duplicate_repair(building, room, fault_type):
     
     return duplicates
 
-def search_orders(building=None, room=None):
+def search_orders(school=None, building=None, room=None):
     conn = get_db_connection()
     cursor = conn.cursor()
     
     query = '''
-        SELECT wo.id, wo.order_no, wo.building, wo.room, wo.fault_desc, wo.fault_type, 
+        SELECT wo.id, wo.order_no, wo.school, wo.building, wo.room, wo.fault_desc, wo.fault_type, 
                wo.priority_level, wo.status, wo.submit_time, wo.assigned_time, wo.completed_time,
                rs.name as staff_name, rs.phone as staff_phone
         FROM work_orders wo
@@ -224,6 +294,9 @@ def search_orders(building=None, room=None):
     '''
     params = []
     
+    if school:
+        query += ' AND wo.school LIKE ?'
+        params.append(f'%{school}%')
     if building:
         query += ' AND wo.building LIKE ?'
         params.append(f'%{building}%')
@@ -245,7 +318,7 @@ def get_work_orders(status=None):
     
     if status:
         cursor.execute('''
-            SELECT wo.id, wo.order_no, wo.building, wo.room, wo.fault_desc, wo.fault_type, 
+            SELECT wo.id, wo.order_no, wo.school, wo.building, wo.room, wo.fault_desc, wo.fault_type, 
                    wo.priority_level, wo.status, wo.submit_time, wo.assigned_time, wo.completed_time,
                    rs.name as staff_name, rs.phone as staff_phone
             FROM work_orders wo
@@ -255,7 +328,7 @@ def get_work_orders(status=None):
         ''', (status,))
     else:
         cursor.execute('''
-            SELECT wo.id, wo.order_no, wo.building, wo.room, wo.fault_desc, wo.fault_type, 
+            SELECT wo.id, wo.order_no, wo.school, wo.building, wo.room, wo.fault_desc, wo.fault_type, 
                    wo.priority_level, wo.status, wo.submit_time, wo.assigned_time, wo.completed_time,
                    rs.name as staff_name, rs.phone as staff_phone
             FROM work_orders wo
@@ -273,7 +346,7 @@ def get_pending_orders():
     cursor = conn.cursor()
     
     cursor.execute('''
-        SELECT wo.id, wo.order_no, wo.building, wo.room, wo.fault_desc, wo.fault_type, 
+        SELECT wo.id, wo.order_no, wo.school, wo.building, wo.room, wo.fault_desc, wo.fault_type, 
                wo.priority_level, wo.status, wo.submit_time, wo.estimated_time
         FROM work_orders wo
         WHERE wo.status = 'pending'
@@ -290,7 +363,7 @@ def get_overdue_orders():
     cursor = conn.cursor()
     
     cursor.execute('''
-        SELECT wo.id, wo.order_no, wo.building, wo.room, wo.fault_desc, wo.fault_type, 
+        SELECT wo.id, wo.order_no, wo.school, wo.building, wo.room, wo.fault_desc, wo.fault_type, 
                wo.priority_level, wo.status, wo.submit_time, wo.estimated_time,
                rs.name as staff_name
         FROM work_orders wo
@@ -353,6 +426,14 @@ def get_work_order_stats():
     ''')
     building_stats = cursor.fetchall()
     
+    cursor.execute('''
+        SELECT wo.school, COUNT(*) as count
+        FROM work_orders wo
+        GROUP BY wo.school
+        ORDER BY count DESC
+    ''')
+    school_stats = cursor.fetchall()
+    
     avg_rating = 0
     cursor.execute('SELECT AVG(rating) FROM work_orders WHERE rating IS NOT NULL')
     rating_result = cursor.fetchone()
@@ -370,6 +451,7 @@ def get_work_order_stats():
         "priority_stats": priority_stats,
         "daily_stats": daily_stats,
         "building_stats": building_stats,
+        "school_stats": school_stats,
         "avg_rating": avg_rating
     }
 
