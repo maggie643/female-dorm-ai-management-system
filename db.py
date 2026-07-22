@@ -166,6 +166,45 @@ def init_db():
     ]
     cursor.executemany('INSERT INTO repair_staff VALUES (NULL, ?, ?, ?, ?, ?)', default_staff)
     
+    default_schools = [
+        ("北京大学", "王主任", "13900139001", "北京市海淀区颐和园路5号", 
+         "周一至周五 6:00-23:00，周末 6:00-23:30", "禁止使用大功率电器", 800, 
+         "周三", "下午", "访客需在宿管处登记身份证信息", ""),
+        ("清华大学", "李主任", "13900139002", "北京市海淀区清华园1号",
+         "周一至周五 6:00-23:00，周末 6:00-23:30", "禁止使用大功率电器", 800,
+         "周四", "下午", "访客需在宿管处登记", ""),
+        ("复旦大学", "张主任", "13900139003", "上海市杨浦区邯郸路220号",
+         "周一至周五 6:00-23:00，周末 6:00-23:30", "禁止使用大功率电器", 800,
+         "周三", "上午", "访客需登记", ""),
+        ("香港大学", "陈教授", "852-28592111", "香港薄扶林道",
+         "周一至周五 7:00-22:30，周末 7:00-23:00", "禁止使用超过1000W电器", 1000,
+         "周二", "下午", "访客需出示有效证件", ""),
+        ("澳门大学", "刘教授", "+853-88228888", "澳门氹仔",
+         "周一至周五 6:30-23:00，周末 6:30-23:30", "禁止使用大功率电器", 800,
+         "周五", "下午", "访客需提前预约", "")
+    ]
+    cursor.executemany('''
+        INSERT INTO schools VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', default_schools)
+    
+    cursor.execute('SELECT id FROM schools WHERE school_name = "北京大学"')
+    pk_id = cursor.fetchone()[0]
+    default_buildings_pk = [
+        (pk_id, "A栋", 6, 20, "A0101-A0620"),
+        (pk_id, "B栋", 6, 20, "B0101-B0620"),
+        (pk_id, "C栋", 8, 24, "C0101-C0824")
+    ]
+    cursor.executemany('INSERT INTO buildings VALUES (NULL, ?, ?, ?, ?, ?)', default_buildings_pk)
+    
+    cursor.execute('SELECT id FROM schools WHERE school_name = "清华大学"')
+    qh_id = cursor.fetchone()[0]
+    default_buildings_qh = [
+        (qh_id, "紫荆1号楼", 12, 24, "Z10101-Z11224"),
+        (qh_id, "紫荆2号楼", 12, 24, "Z20101-Z21224"),
+        (qh_id, "紫荆3号楼", 12, 24, "Z30101-Z31224")
+    ]
+    cursor.executemany('INSERT INTO buildings VALUES (NULL, ?, ?, ?, ?, ?)', default_buildings_qh)
+    
     conn.commit()
     conn.close()
 

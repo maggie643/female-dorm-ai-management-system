@@ -394,11 +394,11 @@ with gr.Blocks(title="高校宿舍AI运营管理系统") as demo:
             my_orders_df = gr.Dataframe(headers=["ID", "工单编号", "高校", "楼栋", "房间", "故障描述", "故障类型", "紧急等级", "状态", "提交时间", "处理人员", "联系电话"], 
                                        interactive=False)
             
-            def submit_with_school(building_dropdown_val, building_input_val, room, fault_desc):
+            def submit_with_building(school, building_dropdown_val, building_input_val, room, fault_desc):
                 building = building_dropdown_val if building_dropdown_val else building_input_val
-                return submit_request(school_input.value, building, room, fault_desc)
+                return submit_request(school, building, room, fault_desc)
             
-            submit_btn.click(submit_request, inputs=[school_input, building_dropdown, dorm_room, fault_text], 
+            submit_btn.click(submit_with_building, inputs=[school_input, building_dropdown, dorm_build_input, dorm_room, fault_text], 
                             outputs=[student_result, teacher_result])
             my_search_btn.click(get_my_orders, inputs=[school_input, my_build, my_room], outputs=my_orders_df)
         
