@@ -349,7 +349,7 @@ with gr.Blocks(title="高校宿舍AI运营管理系统") as demo:
             gr.Markdown("## 提交报修申请")
             
             school_input = gr.Textbox(label="🏫 学校名称", placeholder="请输入学校名称，如：北京大学", value="")
-            building_dropdown = gr.Dropdown([], label="🏢 宿舍楼栋", placeholder="请先输入学校名称")
+            building_dropdown = gr.Dropdown([], label="🏢 宿舍楼栋")
             building_detail = gr.Textbox(label="楼栋详情", interactive=False)
             
             def on_school_change(school):
@@ -398,7 +398,7 @@ with gr.Blocks(title="高校宿舍AI运营管理系统") as demo:
                 building = building_dropdown_val if building_dropdown_val else building_input_val
                 return submit_request(school_input.value, building, room, fault_desc)
             
-            submit_btn.click(submit_request, inputs=[school_input, gr.Textbox(value=lambda: building_dropdown.value or dorm_build_input.value), dorm_room, fault_text], 
+            submit_btn.click(submit_request, inputs=[school_input, building_dropdown, dorm_room, fault_text], 
                             outputs=[student_result, teacher_result])
             my_search_btn.click(get_my_orders, inputs=[school_input, my_build, my_room], outputs=my_orders_df)
         
