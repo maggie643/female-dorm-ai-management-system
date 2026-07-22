@@ -63,6 +63,38 @@ def init_db():
             ''')
         except:
             pass
+        try:
+            cursor.execute('''
+                CREATE TABLE notifications (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    recipient_role TEXT NOT NULL,
+                    recipient_id INTEGER,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    order_no TEXT,
+                    status TEXT NOT NULL DEFAULT 'unread',
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (order_no) REFERENCES work_orders(order_no)
+                )
+            ''')
+        except:
+            pass
+        try:
+            cursor.execute('''
+                CREATE TABLE audit_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    operator_role TEXT NOT NULL,
+                    operator_name TEXT,
+                    action TEXT NOT NULL,
+                    target_type TEXT,
+                    target_id INTEGER,
+                    target_data TEXT,
+                    timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    ip_address TEXT
+                )
+            ''')
+        except:
+            pass
         conn.commit()
         conn.close()
         return
@@ -140,6 +172,34 @@ def init_db():
             rating INTEGER,
             feedback TEXT,
             FOREIGN KEY (assigned_staff_id) REFERENCES repair_staff(id)
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recipient_role TEXT NOT NULL,
+            recipient_id INTEGER,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            order_no TEXT,
+            status TEXT NOT NULL DEFAULT 'unread',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (order_no) REFERENCES work_orders(order_no)
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            operator_role TEXT NOT NULL,
+            operator_name TEXT,
+            action TEXT NOT NULL,
+            target_type TEXT,
+            target_id INTEGER,
+            target_data TEXT,
+            timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            ip_address TEXT
         )
     ''')
     
@@ -774,5 +834,145 @@ def get_repair_staff():
     
     conn.close()
     return staff
+
+def add_notification(recipient_role, title, content, order_no=None, recipient_id=None):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        INSERT INTO notifications (recipient_role, recipient_id, title, content, order_no)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (recipient_role, recipient_id, title, content, order_no))
+    
+    conn.commit()
+    conn.close()
+
+def get_notifications(recipient_role, recipient_id=None):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    query = 'SELECT id, title, content, order_no, status, created_at FROM notifications WHERE recipient_role = ?'
+    params = [recipient_role]
+    
+    if recipient_id is not None:
+        query += ' AND recipient_id = ?'
+        params.append(recipient_id)
+    
+    query += ' ORDER BY created_at DESC'
+    
+    cursor.execute(query, params)
+    notifications = cursor.fetchall()
+    
+    conn.close()
+    return notifications
+
+def mark_notification_read(notification_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('UPDATE notifications SET status = "read" WHERE id = ?', (notification_id,))
+    conn.commit()
+    conn.close()
+
+def get_unread_count(recipient_role, recipient_id=None):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    query = 'SELECT COUNT(*) FROM notifications WHERE recipient_role = ? AND status = "unread"'
+    params = [recipient_role]
+    
+    if recipient_id is not None:
+        query += ' AND recipient_id = ?'
+        params.append(recipient_id)
+    
+    cursor.execute(query, params)
+    count = cursor.fetchone()[0]
+    
+    conn.close()
+    return count
+
+def add_audit_log(operator_role, operator_name, action, target_type=None, target_id=None, target_data=None, ip_address=None):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        INSERT INTO audit_logs (operator_role, operator_name, action, target_type, target_id, target_data, ip_address)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (operator_role, operator_name, action, target_type, target_id, target_data, ip_address))
+    
+    conn.commit()
+    conn.close()
+
+def get_audit_logs(operator_role=None, action=None, target_type=None, start_date=None, end_date=None):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    query = 'SELECT id, operator_role, operator_name, action, target_type, target_id, target_data, timestamp, ip_address FROM audit_logs WHERE 1=1'
+    params = []
+    
+    if operator_role:
+        query += ' AND operator_role = ?'
+        params.append(operator_role)
+    if action:
+        query += ' AND action LIKE ?'
+        params.append(f'%{action}%')
+    if target_type:
+        query += ' AND target_type = ?'
+        params.append(target_type)
+    if start_date:
+        query += ' AND timestamp >= ?'
+        params.append(f'{start_date} 00:00:00')
+    if end_date:
+        query += ' AND timestamp <= ?'
+        params.append(f'{end_date} 23:59:59')
+    
+    query += ' ORDER BY timestamp DESC'
+    
+    cursor.execute(query, params)
+    logs = cursor.fetchall()
+    
+    conn.close()
+    return logs
+
+def get_audit_stats():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT COUNT(*) FROM audit_logs')
+    total = cursor.fetchone()[0]
+    
+    cursor.execute('''
+        SELECT operator_role, COUNT(*) as count
+        FROM audit_logs
+        GROUP BY operator_role
+    ''')
+    role_stats = cursor.fetchall()
+    
+    cursor.execute('''
+        SELECT action, COUNT(*) as count
+        FROM audit_logs
+        GROUP BY action
+        ORDER BY count DESC
+        LIMIT 10
+    ''')
+    action_stats = cursor.fetchall()
+    
+    cursor.execute('''
+        SELECT strftime('%Y-%m-%d', timestamp) as date, COUNT(*) as count
+        FROM audit_logs
+        GROUP BY date
+        ORDER BY date DESC
+        LIMIT 7
+    ''')
+    daily_stats = cursor.fetchall()
+    
+    conn.close()
+    
+    return {
+        "total": total,
+        "role_stats": role_stats,
+        "action_stats": action_stats,
+        "daily_stats": daily_stats
+    }
 
 init_db()

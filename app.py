@@ -3,6 +3,9 @@ import matplotlib.pyplot as plt
 import csv
 import io
 from workflow import submit_repair_request, get_all_orders, get_overdue, mark_complete, get_stats, get_staff_list, submit_rating, search_by_building_room, get_school_list, ask_question, generate_report, register_school, get_school_settings, add_building_to_school, get_school_buildings, get_school_building_names, get_school_building_detail
+from message import get_role_notifications, get_unread_notifications_count, mark_notification_read, mark_all_read, send_order_notification
+from audit import get_audit_records, get_audit_summary, log_order_action, log_school_action, log_staff_action, log_ai_call
+from report import export_work_orders_csv, export_daily_report, generate_monthly_report, export_staff_report, export_school_report
 
 plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
@@ -315,7 +318,10 @@ def update_role_visibility(role):
             gr.update(visible=False),
             gr.update(visible=False),
             gr.update(visible=True),
+            gr.update(visible=False),
+            gr.update(visible=False),
             gr.update(visible=True),
+            gr.update(visible=False),
             gr.update(visible=False)
         ]
     elif role == "宿管":
@@ -324,11 +330,17 @@ def update_role_visibility(role):
             gr.update(visible=True),
             gr.update(visible=False),
             gr.update(visible=True),
+            gr.update(visible=False),
+            gr.update(visible=False),
             gr.update(visible=True),
-            gr.update(visible=False)
+            gr.update(visible=False),
+            gr.update(visible=True)
         ]
     else:
         return [
+            gr.update(visible=True),
+            gr.update(visible=True),
+            gr.update(visible=True),
             gr.update(visible=True),
             gr.update(visible=True),
             gr.update(visible=True),
@@ -629,8 +641,200 @@ with gr.Blocks(title="高校宿舍AI运营管理系统") as demo:
             add_btn.click(add_new_building, inputs=[add_school_name, add_building_name, add_total_floors, 
                                                    add_rooms_per_floor, add_room_format],
                          outputs=[add_result])
+        
+        with gr.TabItem("🔔 消息通知") as tab_notification:
+            gr.Markdown("## 消息通知中心")
+            gr.Markdown("查看系统消息通知，支持多角色消息推送")
+            
+            notification_role = gr.Dropdown(["admin", "staff", "student"], label="选择角色", value="admin")
+            unread_count = gr.Number(label="未读消息数", value=0, interactive=False)
+            
+            def load_notifications(role):
+                count = get_unread_notifications_count(role)
+                notifications = get_role_notifications(role)
+                if not notifications:
+                    return count, []
+                return count, [[n["id"], n["title"], n["content"], n["order_no"] or "-", n["status"], n["created_at"]] for n in notifications]
+            
+            notification_table = gr.Dataframe(headers=["ID", "标题", "内容", "关联工单", "状态", "创建时间"], interactive=False)
+            
+            load_notif_btn = gr.Button("刷新消息")
+            load_notif_btn.click(load_notifications, inputs=[notification_role], outputs=[unread_count, notification_table])
+            
+            def mark_read(notification_id):
+                mark_notification_read(notification_id)
+                return "✅ 已标记为已读"
+            
+            mark_read_btn = gr.Button("标记选中为已读")
+            selected_id = gr.Number(label="消息ID")
+            read_result = gr.Textbox(label="操作结果", interactive=False)
+            
+            mark_read_btn.click(mark_read, inputs=[selected_id], outputs=[read_result])
+            
+            def mark_all_unread_read(role):
+                mark_all_read(role)
+                return "✅ 已全部标记为已读"
+            
+            mark_all_read_btn = gr.Button("全部标记为已读")
+            mark_all_result = gr.Textbox(label="操作结果", interactive=False)
+            
+            mark_all_read_btn.click(mark_all_unread_read, inputs=[notification_role], outputs=[mark_all_result])
+        
+        with gr.TabItem("📋 操作审计") as tab_audit:
+            gr.Markdown("## 操作审计日志")
+            gr.Markdown("记录所有人员的操作记录，便于追溯和安全审计")
+            
+            with gr.Row():
+                audit_role = gr.Dropdown([None, "admin", "staff", "student"], label="按角色筛选", value=None)
+                audit_action = gr.Textbox(label="按操作筛选", placeholder="如：创建、分配")
+            
+            with gr.Row():
+                start_date = gr.Textbox(label="开始日期", placeholder="YYYY-MM-DD")
+                end_date = gr.Textbox(label="结束日期", placeholder="YYYY-MM-DD")
+            
+            search_audit_btn = gr.Button("搜索日志")
+            
+            audit_table = gr.Dataframe(headers=["ID", "操作角色", "操作人", "操作内容", "目标类型", "目标ID", "目标数据", "时间", "IP地址"], interactive=False)
+            
+            def search_audit(role, action, start, end):
+                logs = get_audit_records(role if role != "None" else None, action or None, None, start or None, end or None)
+                if not logs:
+                    return []
+                return [[l["id"], l["operator_role"], l["operator_name"] or "-", l["action"], l["target_type"] or "-", l["target_id"] or "-", l["target_data"] or "-", l["timestamp"], l["ip_address"] or "-"] for l in logs]
+            
+            search_audit_btn.click(search_audit, inputs=[audit_role, audit_action, start_date, end_date], outputs=[audit_table])
+            
+            gr.Markdown("---")
+            gr.Markdown("## 审计统计")
+            
+            with gr.Row():
+                total_logs = gr.Number(label="总操作数", value=0)
+            
+            def load_audit_stats():
+                stats = get_audit_summary()
+                return stats["total"]
+            
+            refresh_audit_btn = gr.Button("刷新统计")
+            refresh_audit_btn.click(load_audit_stats, outputs=[total_logs])
+        
+        with gr.TabItem("📊 运营报表") as tab_report:
+            gr.Markdown("## 运营报表导出")
+            gr.Markdown("支持导出工单数据、日报、月报等运营报表")
+            
+            gr.Markdown("### 📝 工单数据导出")
+            export_orders_btn = gr.Button("导出全部工单CSV")
+            orders_file = gr.File(label="工单数据文件")
+            orders_export_result = gr.Textbox(label="导出结果", interactive=False)
+            
+            def export_orders():
+                try:
+                    output = io.StringIO()
+                    orders = get_all_orders()
+                    if not orders:
+                        return None, "没有数据可导出"
+                    
+                    writer = csv.writer(output)
+                    writer.writerow(["ID", "工单编号", "高校", "楼栋", "房间", "故障描述", "故障类型", "紧急等级", "状态", "提交时间", "分配时间", "完成时间", "处理人员", "联系电话"])
+                    
+                    for order in orders:
+                        id, order_no, school, building, room, fault_desc, fault_type, priority, status, submit_time, assigned_time, completed_time, staff_name, staff_phone = order
+                        writer.writerow([id, order_no, school or "-", building, room, fault_desc, fault_type, priority, status, submit_time, assigned_time or "-", completed_time or "-", staff_name or "-", staff_phone or "-"])
+                    
+                    output.seek(0)
+                    return gr.File(label="工单数据导出", value=output.getvalue(), file_name="work_orders_export.csv"), "✅ 工单数据已导出"
+                except Exception as e:
+                    return None, f"❌ 导出失败：{str(e)}"
+            
+            export_orders_btn.click(export_orders, outputs=[orders_file, orders_export_result])
+            
+            gr.Markdown("---")
+            gr.Markdown("### 👷 维修人员报表")
+            export_staff_btn = gr.Button("导出维修人员CSV")
+            staff_file = gr.File(label="人员数据文件")
+            staff_export_result = gr.Textbox(label="导出结果", interactive=False)
+            
+            def export_staff():
+                try:
+                    output = io.StringIO()
+                    staff = get_staff_list()
+                    if not staff:
+                        return None, "没有数据可导出"
+                    
+                    writer = csv.writer(output)
+                    writer.writerow(["ID", "姓名", "电话", "技能", "状态", "当前工单"])
+                    
+                    for s in staff:
+                        id, name, phone, skills, status, current_order = s
+                        writer.writerow([id, name, phone, skills, status, current_order or "-"])
+                    
+                    output.seek(0)
+                    return gr.File(label="人员数据导出", value=output.getvalue(), file_name="staff_export.csv"), "✅ 人员数据已导出"
+                except Exception as e:
+                    return None, f"❌ 导出失败：{str(e)}"
+            
+            export_staff_btn.click(export_staff, outputs=[staff_file, staff_export_result])
+            
+            gr.Markdown("---")
+            gr.Markdown("### 🏫 学校信息报表")
+            export_school_btn = gr.Button("导出学校信息CSV")
+            school_file = gr.File(label="学校数据文件")
+            school_export_result = gr.Textbox(label="导出结果", interactive=False)
+            
+            def export_schools():
+                try:
+                    output = io.StringIO()
+                    schools = get_school_list()
+                    if not schools:
+                        return None, "没有数据可导出"
+                    
+                    writer = csv.writer(output)
+                    writer.writerow(["学校名称", "负责人", "联系电话", "地址"])
+                    
+                    for school in schools:
+                        writer.writerow([school[0], school[1] or "-", school[2] or "-", school[3] or "-"])
+                    
+                    output.seek(0)
+                    return gr.File(label="学校数据导出", value=output.getvalue(), file_name="schools_export.csv"), "✅ 学校数据已导出"
+                except Exception as e:
+                    return None, f"❌ 导出失败：{str(e)}"
+            
+            export_school_btn.click(export_schools, outputs=[school_file, school_export_result])
+            
+            gr.Markdown("---")
+            gr.Markdown("### 📅 月度工作报告")
+            month_input = gr.Textbox(label="月份", placeholder="如：2026-07", value="2026-07")
+            generate_month_btn = gr.Button("生成月报")
+            month_report = gr.Textbox(label="月度报告", lines=10, interactive=False)
+            
+            def generate_month(month):
+                try:
+                    report = generate_monthly_report(month)
+                    report_text = f"""
+📅 月度工作报告 - {report['month']}
+
+📊 总体概况
+- 总工单数：{report['total_orders']}
+- 已完成：{report['completed_orders']}
+- 处理中：{report['processing_orders']}
+- 待分配：{report['pending_orders']}
+- 完成率：{report['completion_rate']}%
+
+🔧 故障类型分布
+"""
+                    for fault_type, count in report["fault_type_distribution"].items():
+                        report_text += f"- {fault_type}：{count}单\n"
+                    
+                    report_text += "\n🏫 学校分布\n"
+                    for school, count in report["school_distribution"].items():
+                        report_text += f"- {school}：{count}单\n"
+                    
+                    return report_text
+                except Exception as e:
+                    return f"❌ 生成失败：{str(e)}"
+            
+            generate_month_btn.click(generate_month, inputs=[month_input], outputs=[month_report])
     
-    role_dropdown.change(update_role_visibility, inputs=[role_dropdown], outputs=[tab_repair, tab_management, tab_analysis, tab_ai, tab_dashboard, tab_school])
+    role_dropdown.change(update_role_visibility, inputs=[role_dropdown], outputs=[tab_repair, tab_management, tab_analysis, tab_ai, tab_dashboard, tab_school, tab_notification, tab_audit, tab_report])
 
 if __name__ == "__main__":
     demo.launch(
