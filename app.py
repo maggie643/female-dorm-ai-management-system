@@ -1,5 +1,7 @@
 import gradio as gr
 import matplotlib.pyplot as plt
+import csv
+import io
 from workflow import submit_repair_request, get_all_orders, get_overdue, mark_complete, get_stats, get_staff_list, submit_rating, search_by_building_room, get_school_list
 
 plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']
@@ -7,7 +9,7 @@ plt.rcParams['axes.unicode_minus'] = False
 
 def get_schools_for_dropdown():
     schools = get_school_list()
-    return schools if schools else ["北京大学", "清华大学", "复旦大学"]
+    return schools if schools else ["北京大学", "清华大学", "复旦大学", "香港大学", "澳门大学"]
 
 def submit_request(school, building, room, fault_desc):
     if not school or not building or not room or not fault_desc:
@@ -97,6 +99,11 @@ def search_orders(school, building, room):
         data.append([id, order_no, school_val or "-", building_val, room_val, fault_desc, fault_type, f"{priority_color} {priority}", status, submit_time, staff_name or "未分配", staff_phone or "-"])
     
     return data
+
+def get_my_orders(school, building, room):
+    if not school and not building and not room:
+        return []
+    return search_orders(school, building, room)
 
 def complete_order(order_id):
     if order_id:
@@ -213,12 +220,28 @@ def on_rating_change(rating):
     stars = "⭐" * rating + "☆" * (5 - rating)
     return stars
 
+def export_orders_csv():
+    orders = get_all_orders()
+    if not orders:
+        return None, "没有数据可导出"
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    writer.writerow(["ID", "工单编号", "高校", "楼栋", "房间", "故障描述", "故障类型", "紧急等级", "状态", "提交时间", "分配时间", "完成时间", "处理人员", "联系电话"])
+    
+    for order in orders:
+        id, order_no, school, building, room, fault_desc, fault_type, priority, status, submit_time, assigned_time, completed_time, staff_name, staff_phone = order
+        writer.writerow([id, order_no, school or "-", building, room, fault_desc, fault_type, priority, status, submit_time, assigned_time or "-", completed_time or "-", staff_name or "-", staff_phone or "-"])
+    
+    output.seek(0)
+    csv_data = output.getvalue()
+    
+    return gr.File(label="工单数据导出", value=csv_data, file_name="work_orders_export.csv"), "✅ 工单数据已导出，请下载CSV文件"
+
 def update_role_visibility(role):
     if role == "学生":
         return [
-            gr.update(visible=True),
-            gr.update(visible=True),
-            gr.update(visible=False),
             gr.update(visible=True),
             gr.update(visible=False),
             gr.update(visible=False),
@@ -228,17 +251,11 @@ def update_role_visibility(role):
         return [
             gr.update(visible=True),
             gr.update(visible=True),
-            gr.update(visible=True),
-            gr.update(visible=True),
-            gr.update(visible=True),
-            gr.update(visible=True),
+            gr.update(visible=False),
             gr.update(visible=True)
         ]
     else:
         return [
-            gr.update(visible=True),
-            gr.update(visible=True),
-            gr.update(visible=True),
             gr.update(visible=True),
             gr.update(visible=True),
             gr.update(visible=True),
@@ -252,8 +269,8 @@ with gr.Blocks(title="高校宿舍AI报修管理系统") as demo:
         role_dropdown = gr.Dropdown(["管理员", "宿管", "学生"], label="角色选择", value="管理员")
         school_dropdown = gr.Dropdown(get_schools_for_dropdown(), label="选择高校", value="北京大学")
     
-    with gr.Tabs():
-        with gr.TabItem("📝 报修提交"):
+    with gr.Tabs() as tabs:
+        with gr.TabItem("📝 报修提交") as tab_repair:
             gr.Markdown("## 提交报修申请")
             
             gr.Markdown("### 🚨 紧急等级说明")
@@ -277,9 +294,18 @@ with gr.Blocks(title="高校宿舍AI报修管理系统") as demo:
             gr.Markdown("### 📞 老师端反馈")
             teacher_result = gr.Textbox(label="学校联系人信息", lines=5, interactive=False)
             
+            gr.Markdown("### 🔍 我的报修记录")
+            with gr.Row():
+                my_build = gr.Textbox(label="搜索楼栋", placeholder="输入楼栋")
+                my_room = gr.Textbox(label="搜索房间", placeholder="输入房间号")
+                my_search_btn = gr.Button("查询我的报修")
+            my_orders_df = gr.Dataframe(headers=["ID", "工单编号", "高校", "楼栋", "房间", "故障描述", "故障类型", "紧急等级", "状态", "提交时间", "处理人员", "联系电话"], 
+                                       interactive=False)
+            
             submit_btn.click(submit_request, inputs=[school_dropdown, dorm_build, dorm_room, fault_text], outputs=[student_result, teacher_result])
+            my_search_btn.click(get_my_orders, inputs=[school_dropdown, my_build, my_room], outputs=my_orders_df)
         
-        with gr.TabItem("📋 工单管理"):
+        with gr.TabItem("📋 工单管理") as tab_management:
             gr.Markdown("## 工单列表")
             
             with gr.Row():
@@ -291,9 +317,13 @@ with gr.Blocks(title="高校宿舍AI报修管理系统") as demo:
             with gr.Row():
                 refresh_btn = gr.Button("刷新列表")
                 overdue_btn = gr.Button("查看超时工单")
+                export_btn = gr.Button("导出CSV")
             
             orders_df = gr.Dataframe(headers=["ID", "工单编号", "高校", "楼栋", "房间", "故障描述", "故障类型", "紧急等级", "状态", "提交时间", "处理人员", "联系电话"], 
                                      interactive=False)
+            
+            export_file = gr.File(label="导出文件", visible=False)
+            export_result = gr.Textbox(label="导出结果", interactive=False)
             
             gr.Markdown("## 完成工单")
             with gr.Row():
@@ -315,13 +345,14 @@ with gr.Blocks(title="高校宿舍AI报修管理系统") as demo:
             search_btn.click(search_orders, inputs=[search_school, search_build, search_room], outputs=orders_df)
             complete_btn.click(complete_order, inputs=[order_id_input], outputs=[complete_result])
             rating_btn.click(submit_order_rating, inputs=[order_id_input, rating_input, feedback_input], outputs=[rating_result])
+            export_btn.click(export_orders_csv, outputs=[export_file, export_result])
             
             gr.Markdown("## 维修人员状态")
             staff_df = gr.Dataframe(headers=["ID", "姓名", "电话", "技能", "状态", "当前工单"], 
                                     interactive=False)
             refresh_btn.click(load_staff, outputs=staff_df)
         
-        with gr.TabItem("📊 数据分析"):
+        with gr.TabItem("📊 数据分析") as tab_analysis:
             gr.Markdown("## 数据统计分析")
             refresh_stats_btn = gr.Button("刷新统计数据")
             
@@ -340,6 +371,8 @@ with gr.Blocks(title="高校宿舍AI报修管理系统") as demo:
             fault_img = gr.Plot(label="故障类型分布")
             
             refresh_stats_btn.click(generate_stats, outputs=[stats_text, pie_img, trend_img, building_img, fault_img])
+    
+    role_dropdown.change(update_role_visibility, inputs=[role_dropdown], outputs=[tab_repair, tab_management, tab_analysis])
 
 if __name__ == "__main__":
     demo.launch(
